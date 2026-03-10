@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    env_file: .env
+    depends_on:
+      - redis
+    command: python bot/main.py
+
+  worker:
+    build: .
+    env_file: .env
+    depends_on:
+      - redis
+    command: celery -A core.celery_app worker --loglevel=info
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
