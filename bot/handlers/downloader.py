@@ -1,29 +1,44 @@
 from aiogram import Router, types, F
-from bot.utils.link_parser import detect_platform
-from bot.services.downloader_service import download_media
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from bot.services.downloader_service import extract_metadata, search_youtube
 import os
 
 router = Router()
 
+# Simple in-memory cache for search results (in production use Redis)
+search_cache = {}
+
 @router.message(F.text.contains("http"))
 async def handle_link(message: types.Message):
     url = message.text
-    platform = detect_platform(url)
+    status_msg = await message.answer("🔍 Havola tahlil qilinmoqda...")
     
-    if not platform:
-        await message.reply("😔 Kechirasiz, bu havola qo'llab-quvvatlanmaydigan platformadan yoki noto'g'ri.")
+    metadata = await extract_metadata(url)
+    if not metadata:
+        await status_msg.edit_text("❌ Havoladan ma'lumot olib bo'lmadi.")
         return
     
-    status_msg = await message.answer(f"⏳ {platform.capitalize()} videosi tayyorlanmoqda...")
+    query = metadata.get('title') or metadata.get('track') or "music"
+    artist = metadata.get('artist') or ""
     
-    file_path, title = await download_media(url, platform)
+    await status_msg.edit_text(f"🎵 Topilgan: **{query}** {artist}\n🔎 YouTube-dan qidirilmoqda...")
     
-    if file_path and os.path.exists(file_path):
-        await message.answer_video(
-            video=types.FSInputFile(file_path),
-            caption=f"✅ {title}\n\n@OmniSaveBot orqali yuklab olindi"
-        )
-        await status_msg.delete()
-        os.remove(file_path)
-    else:
-        await status_msg.edit_text("❌ Xatolik yuz berdi. Videoni yuklab bo'lmadi.")
+    results = await search_youtube(f"{query} {artist}", limit=10)
+    if not results:
+        await status_msg.edit_text("❌ Hech qanday natija topilmadi.")
+        return
+    
+    chat_id = message.chat.id
+    search_cache[chat_id] = results
+    
+    text = f"🎵 **Musiqa:** {query}\n👤 **Artis:** {artist}\n\n**Mavjud versiyalar:**\n\n"
+    builder = InlineKeyboardBuilder()
+    
+    for i, res in enumerate(results, 1):
+        text += f"{i}. {res['title']}\n"
+        builder.button(text=f"[{i}]", callback_data=f"select_{i-1}")
+    
+    builder.adjust(5) # 5 buttons per row
+    
+    await status_msg.delete()
+    await message.answer(text, reply_markup=builder.as_markup())
