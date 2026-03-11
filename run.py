@@ -5,6 +5,12 @@ import os
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 if __name__ == "__main__":
+    print(f"Current Dir: {os.getcwd()}")
+    print(f"Files: {os.listdir('.')}")
+    if os.path.exists('bot'):
+        print(f"Bot Files: {os.listdir('bot')}")
+    print(f"Python Path: {sys.path}")
+    
     from bot.main import run_bot, run_web
     import asyncio
     import threading

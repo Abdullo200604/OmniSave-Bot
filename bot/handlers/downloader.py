@@ -1,6 +1,7 @@
 from aiogram import Router, types, F
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.services.downloader_service import extract_metadata, search_youtube
+from bot.utils.link_parser import detect_platform
 import os
 
 router = Router()
@@ -11,11 +12,22 @@ search_cache = {}
 @router.message(F.text.contains("http"))
 async def handle_link(message: types.Message):
     url = message.text
+    platform = detect_platform(url)
+    
+    if not platform:
+        await message.reply(
+            "😔 Kechirasiz, bu platforma hozircha qo'llab-quvvatlanmaydi.\n\n"
+            "📥 Men quyidagi platformalardan yuklay olaman:\n"
+            "• YouTube, Instagram, TikTok, Facebook\n"
+            "• Pinterest, Snapchat, Likee, VK, Threads"
+        )
+        return
+
     status_msg = await message.answer("🔍 Havola tahlil qilinmoqda...")
     
     metadata = await extract_metadata(url)
     if not metadata:
-        await status_msg.edit_text("❌ Havoladan ma'lumot olib bo'lmadi.")
+        await status_msg.edit_text("❌ Havoladan ma'lumot olib bo'lmadi. Havola to'g'riligini tekshiring.")
         return
     
     query = metadata.get('title') or metadata.get('track') or "music"
