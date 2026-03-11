@@ -28,11 +28,13 @@ async def handle_link(message: types.Message):
     
     metadata = await extract_metadata(url)
     if not metadata:
-        await status_msg.edit_text("❌ Havoladan ma'lumot olib bo'lmadi. Havola to'g'riligini tekshiring.")
+        await status_msg.edit_text("❌ Havoladan ma'lumot olib bo'lmadi. Havola to'g'riligini tekshiring yoki keyinroq urinib ko'ring (ba'zida platformalar cheklov qo'yadi).")
         return
     
+    # Use normalized URL if returned (e.g. threads.com -> threads.net)
+    final_url = metadata.get('url', url)
     chat_id = message.chat.id
-    media_cache[chat_id] = {"url": url, "metadata": metadata}
+    media_cache[chat_id] = {"url": final_url, "metadata": metadata}
     
     title = metadata.get('title') or "Video"
     artist = metadata.get('artist') or ""
