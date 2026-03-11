@@ -6,40 +6,64 @@ from bot import config
 
 async def get_fastsaver_info(url: str):
     if not config.FASTSAVER_TOKEN:
+        print("FastSaver token not found in config.")
         return None
     api_url = "https://fastsaverapi.com/get-info"
     params = {"url": url, "token": config.FASTSAVER_TOKEN}
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+        async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+            async with session.get(api_url, params=params, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                print(f"FastSaver API response status: {resp.status}")
                 if resp.status == 200:
                     data = await resp.json()
                     if not data.get("error"):
                         return data
+                    else:
+                        print(f"FastSaver API returned error: {data.get('message')}")
     except Exception as e:
-        print(f"FastSaver API error: {e}")
+        print(f"FastSaver API exception: {e}")
     return None
 
 async def get_rapidapi_info(url: str):
     if not config.RAPIDAPI_KEY or not config.RAPIDAPI_HOST:
+        print("RapidAPI config missing.")
         return None
     api_url = f"https://{config.RAPIDAPI_HOST}/"
     headers = {
         "X-RapidAPI-Key": config.RAPIDAPI_KEY,
-        "X-RapidAPI-Host": config.RAPIDAPI_HOST
+        "X-RapidAPI-Host": config.RAPIDAPI_HOST,
+        "User-Agent": "Mozilla/5.0"
     }
     params = {"url": url}
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(api_url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.get(api_url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                print(f"RapidAPI response status: {resp.status}")
                 if resp.status == 200:
                     return await resp.json()
+                else:
+                    print(f"RapidAPI error response: {await resp.text()}")
     except Exception as e:
-        print(f"RapidAPI error: {e}")
+        print(f"RapidAPI exception: {e}")
     return None
+
+async def resolve_redirect(url: str):
+    try:
+        async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+            async with session.head(url, allow_redirects=True, timeout=10) as resp:
+                return str(resp.url)
+    except:
+        return url
 
 async def extract_metadata(url: str):
     print(f"Extracting metadata for: {url}")
+    
+    # Try to resolve redirects for Facebook share links
+    if "facebook.com/share" in url:
+        print("Resolving Facebook share redirect...")
+        url = await resolve_redirect(url)
+        print(f"Resolved URL: {url}")
+
     # Normalize Threads.com to Threads.net
     if "threads.com" in url:
         url = url.replace("threads.com", "threads.net")
