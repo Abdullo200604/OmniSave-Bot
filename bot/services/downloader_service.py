@@ -71,6 +71,21 @@ async def download_audio(url: str, output_path: str):
         print(f"Download error: {e}")
         return None
 
+async def download_video(url: str, output_path: str):
+    ydl_opts = {
+        'format': 'best',
+        'outtmpl': output_path,
+        'quiet': True,
+        'no_warnings': True,
+    }
+    loop = asyncio.get_event_loop()
+    try:
+        await loop.run_in_executor(None, lambda: extract_info(url, ydl_opts, download=True))
+        return output_path
+    except Exception as e:
+        print(f"Video download error: {e}")
+        return None
+
 def extract_info(url, opts, download=True):
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=download)

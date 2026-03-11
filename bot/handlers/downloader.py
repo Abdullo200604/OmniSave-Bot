@@ -6,8 +6,9 @@ import os
 
 router = Router()
 
-# Simple in-memory cache for search results (in production use Redis)
+# Simple in-memory cache for search results and media info
 search_cache = {}
+media_cache = {}
 
 @router.message(F.text.contains("http"))
 async def handle_link(message: types.Message):
@@ -30,27 +31,22 @@ async def handle_link(message: types.Message):
         await status_msg.edit_text("❌ Havoladan ma'lumot olib bo'lmadi. Havola to'g'riligini tekshiring.")
         return
     
-    query = metadata.get('title') or metadata.get('track') or "music"
+    chat_id = message.chat.id
+    media_cache[chat_id] = {"url": url, "metadata": metadata}
+    
+    title = metadata.get('title') or "Video"
     artist = metadata.get('artist') or ""
     
-    await status_msg.edit_text(f"🎵 Topilgan: **{query}** {artist}\n🔎 YouTube-dan qidirilmoqda...")
-    
-    results = await search_youtube(f"{query} {artist}", limit=10)
-    if not results:
-        await status_msg.edit_text("❌ Hech qanday natija topilmadi.")
-        return
-    
-    chat_id = message.chat.id
-    search_cache[chat_id] = results
-    
-    text = f"🎵 **Musiqa:** {query}\n👤 **Artis:** {artist}\n\n**Mavjud versiyalar:**\n\n"
     builder = InlineKeyboardBuilder()
-    
-    for i, res in enumerate(results, 1):
-        text += f"{i}. {res['title']}\n"
-        builder.button(text=f"[{i}]", callback_data=f"select_{i-1}")
-    
-    builder.adjust(5) # 5 buttons per row
+    builder.button(text="📹 Videoni yuklash", callback_data="media_download_video")
+    builder.button(text="🎵 Musiqani aniqlash", callback_data="media_search_music")
+    builder.adjust(1)
     
     await status_msg.delete()
-    await message.answer(text, reply_markup=builder.as_markup())
+    await message.answer(
+        f"✅ Ma'lumot topildi:\n\n"
+        f"📝 **Nomi:** {title}\n"
+        f"👤 **Muallif:** {artist}\n\n"
+        f"Nima qilmoqchisiz?",
+        reply_markup=builder.as_markup()
+    )

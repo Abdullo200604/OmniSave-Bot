@@ -1,12 +1,68 @@
 from aiogram import Router, types, F
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.services.downloader_service import download_audio
+from bot.services.downloader_service import download_audio, download_video, search_youtube
 from bot.services.audio_processor import apply_slowed, apply_8d, apply_bass_boost
-from bot.handlers.downloader import search_cache
+from bot.handlers.downloader import search_cache, media_cache
 import os
 import uuid
 
 router = Router()
+
+@router.callback_query(F.data == "media_download_video")
+async def handle_video_download(callback: types.CallbackQuery):
+    chat_id = callback.message.chat.id
+    if chat_id not in media_cache:
+        await callback.answer("❌ Ma'lumot eskirgan.")
+        return
+    
+    data = media_cache[chat_id]
+    await callback.message.edit_text("⏳ Video yuklanmoqda...")
+    
+    file_id = str(uuid.uuid4())
+    temp_path = f"downloads/{file_id}.mp4"
+    
+    path = await download_video(data['url'], temp_path)
+    if path and os.path.exists(path):
+        await callback.message.delete()
+        await callback.message.answer_video(
+            video=types.FSInputFile(path),
+            caption=f"✅ {data['metadata'].get('title', 'Video')}"
+        )
+        os.remove(path)
+    else:
+        await callback.message.edit_text("❌ Videoni yuklashda xatolik yuz berdi.")
+
+@router.callback_query(F.data == "media_search_music")
+async def handle_music_search(callback: types.CallbackQuery):
+    chat_id = callback.message.chat.id
+    if chat_id not in media_cache:
+        await callback.answer("❌ Ma'lumot eskirgan.")
+        return
+    
+    data = media_cache[chat_id]
+    metadata = data['metadata']
+    
+    query = metadata.get('title') or metadata.get('track') or "music"
+    artist = metadata.get('artist') or ""
+    
+    await callback.message.edit_text("🔎 YouTube-dan qidirilmoqda...")
+    
+    results = await search_youtube(f"{query} {artist}", limit=10)
+    if not results:
+        await callback.message.edit_text("❌ Hech qanday musiqa topilmadi.")
+        return
+    
+    search_cache[chat_id] = results
+    
+    text = f"🎵 **Musiqa:** {query}\n👤 **Artis:** {artist}\n\n**Mavjud versiyalar:**\n\n"
+    builder = InlineKeyboardBuilder()
+    
+    for i, res in enumerate(results, 1):
+        text += f"{i}. {res['title']}\n"
+        builder.button(text=f"[{i}]", callback_data=f"select_{i-1}")
+    
+    builder.adjust(5)
+    await callback.message.edit_text(text, reply_markup=builder.as_markup())
 
 @router.callback_query(F.data.startswith("select_"))
 async def handle_selection(callback: types.CallbackQuery):
