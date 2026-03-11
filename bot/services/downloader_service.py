@@ -6,27 +6,27 @@ from bot import config
 
 async def get_fastsaver_info(url: str):
     if not config.FASTSAVER_TOKEN:
-        print("FastSaver token not found in config.")
+        print("FastSaver token not found in config.", flush=True)
         return None
     api_url = "https://fastsaverapi.com/get-info"
     params = {"url": url, "token": config.FASTSAVER_TOKEN}
     try:
         async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
             async with session.get(api_url, params=params, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-                print(f"FastSaver API response status: {resp.status}")
+                print(f"FastSaver API response status: {resp.status}", flush=True)
                 if resp.status == 200:
                     data = await resp.json()
                     if not data.get("error"):
                         return data
                     else:
-                        print(f"FastSaver API returned error: {data.get('message')}")
+                        print(f"FastSaver API returned error: {data.get('message')}", flush=True)
     except Exception as e:
-        print(f"FastSaver API exception: {e}")
+        print(f"FastSaver API exception: {e}", flush=True)
     return None
 
 async def get_rapidapi_info(url: str):
     if not config.RAPIDAPI_KEY or not config.RAPIDAPI_HOST:
-        print("RapidAPI config missing.")
+        print("RapidAPI config missing.", flush=True)
         return None
     api_url = f"https://{config.RAPIDAPI_HOST}/"
     headers = {
@@ -38,13 +38,13 @@ async def get_rapidapi_info(url: str):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(api_url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-                print(f"RapidAPI response status: {resp.status}")
+                print(f"RapidAPI response status: {resp.status}", flush=True)
                 if resp.status == 200:
                     return await resp.json()
                 else:
-                    print(f"RapidAPI error response: {await resp.text()}")
+                    print(f"RapidAPI error response: {await resp.text()}", flush=True)
     except Exception as e:
-        print(f"RapidAPI exception: {e}")
+        print(f"RapidAPI exception: {e}", flush=True)
     return None
 
 async def resolve_redirect(url: str):
@@ -56,50 +56,51 @@ async def resolve_redirect(url: str):
         return url
 
 async def extract_metadata(url: str):
-    print(f"Extracting metadata for: {url}")
-    
-    # Try to resolve redirects for Facebook share links
-    if "facebook.com/share" in url:
-        print("Resolving Facebook share redirect...")
-        url = await resolve_redirect(url)
-        print(f"Resolved URL: {url}")
+    print(f"Extracting metadata for: {url}", flush=True)
+    original_url = url
 
     # Normalize Threads.com to Threads.net
     if "threads.com" in url:
         url = url.replace("threads.com", "threads.net")
     
-    # 1. Try FastSaver first
-    print("Trying FastSaver API...")
-    fs_data = await get_fastsaver_info(url)
+    # 1. Try FastSaver first with ORIGINAL URL (let it handle the share links)
+    print("Trying FastSaver API with original URL...", flush=True)
+    fs_data = await get_fastsaver_info(original_url)
     if fs_data:
-        print(f"FastSaver success: {fs_data.get('hosting')}")
+        print(f"FastSaver success (original URL): {fs_data.get('hosting')}", flush=True)
         return {
             "title": fs_data.get('caption') or "Video",
             "artist": fs_data.get('hosting') or "FastSaver",
             "track": fs_data.get('shortcode'),
             "duration": None,
-            "url": url,
+            "url": original_url,
             "download_url": fs_data.get('download_url'),
             "thumb": fs_data.get('thumb')
         }
         
-    # 2. Try RapidAPI fallback
-    print("Trying RapidAPI...")
-    ra_data = await get_rapidapi_info(url)
+    # 2. Try RapidAPI fallback with ORIGINAL URL
+    print("Trying RapidAPI with original URL...", flush=True)
+    ra_data = await get_rapidapi_info(original_url)
     if ra_data and ra_data.get("url"):
-        print("RapidAPI success")
+        print("RapidAPI success (original URL)", flush=True)
         return {
             "title": ra_data.get('title') or "Video",
             "artist": "RapidAPI",
             "track": None,
             "duration": None,
-            "url": url,
-            "download_url": ra_data.get('url'),
+            "url": original_url,
+            "download_url": ra_data.get("url"),
             "thumb": ra_data.get('thumbnail')
         }
-        
-    # 3. Fallback to yt-dlp
-    print("Trying yt-dlp fallback...")
+
+    # 3. If external APIs fail with share link, try resolving redirect for yt-dlp
+    if "facebook.com/share" in url:
+        print("Resolving Facebook share redirect for yt-dlp fallback...", flush=True)
+        url = await resolve_redirect(url)
+        print(f"Resolved URL for yt-dlp: {url}", flush=True)
+
+    # 4. Fallback to yt-dlp
+    print("Trying yt-dlp fallback...", flush=True)
     user_agents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
@@ -114,13 +115,12 @@ async def extract_metadata(url: str):
             'referer': 'https://www.google.com/',
             'nocheckcertificate': True,
             'geo_bypass': True,
-            # 'impersonate': 'chrome', # Disabling for now due to dependency issues
         }
         loop = asyncio.get_event_loop()
         try:
             info = await loop.run_in_executor(None, lambda: extract_info(url, ydl_opts, download=False))
             if info:
-                print(f"yt-dlp success: {info.get('title')}")
+                print(f"yt-dlp success: {info.get('title')}", flush=True)
                 return {
                     "title": info.get('title'),
                     "artist": info.get('artist') or info.get('uploader'),
@@ -129,9 +129,9 @@ async def extract_metadata(url: str):
                     "url": url
                 }
         except Exception as e:
-            print(f"yt-dlp attempt failure with UA {ua}: {e}")
+            print(f"yt-dlp attempt failure with UA {ua}: {e}", flush=True)
             
-    print("All metadata extraction methods failed.")
+    print("All metadata extraction methods failed.", flush=True)
     return None
 
 async def search_youtube(query: str, limit: int = 10):
