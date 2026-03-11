@@ -9,7 +9,7 @@ PLATFORMS = {
     "likee": [r"likee\.video"],
     "vk": [r"vk\.com"],
     "facebook": [r"facebook\.com", r"fb\.watch"],
-    "threads": [r"threads\.net"],
+    "threads": [r"threads\.net", r"threads\.com"],
 }
 
 def detect_platform(url: str) -> str:

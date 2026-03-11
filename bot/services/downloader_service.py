@@ -4,9 +4,13 @@ import os
 
 async def extract_metadata(url: str):
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'best', # Changing bestaudio to best to be more versatile
         'quiet': True,
         'no_warnings': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.google.com/',
+        'nocheckcertificate': True,
+        'geo_bypass': True,
     }
     loop = asyncio.get_event_loop()
     try:
@@ -27,6 +31,7 @@ async def search_youtube(query: str, limit: int = 10):
         'quiet': True,
         'no_warnings': True,
         'extract_flat': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     loop = asyncio.get_event_loop()
     try:
@@ -52,6 +57,10 @@ async def download_audio(url: str, output_path: str):
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.google.com/',
+        'nocheckcertificate': True,
+        'geo_bypass': True,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -77,6 +86,10 @@ async def download_video(url: str, output_path: str):
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.google.com/',
+        'nocheckcertificate': True,
+        'geo_bypass': True,
     }
     loop = asyncio.get_event_loop()
     try:
