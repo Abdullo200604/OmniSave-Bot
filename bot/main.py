@@ -15,6 +15,9 @@ async def run_bot():
     dp.include_router(audio_handler.router)
     
     print("Bot is starting...")
+    import os
+    if not os.path.exists("downloads"):
+        os.makedirs("downloads")
     await dp.start_polling(bot)
 
 def run_web():
