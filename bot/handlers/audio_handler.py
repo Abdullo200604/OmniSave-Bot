@@ -16,12 +16,13 @@ async def handle_video_download(callback: types.CallbackQuery):
         return
     
     data = media_cache[chat_id]
+    direct_url = data['metadata'].get("download_url")
     await callback.message.edit_text("⏳ Video yuklanmoqda...")
     
     file_id = str(uuid.uuid4())
     temp_path = f"downloads/{file_id}.mp4"
     
-    path = await download_video(data['url'], temp_path)
+    path = await download_video(data['url'], temp_path, direct_url=direct_url)
     if path and os.path.exists(path):
         await callback.message.delete()
         await callback.message.answer_video(
