@@ -9,4 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "bot/main.py"]
+ENV PYTHONPATH=/app
+CMD ["python", "-m", "bot.main"]

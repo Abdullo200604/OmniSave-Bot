@@ -6,3 +6,4 @@ python-dotenv
 aiohttp
 celery
 redis
+gunicorn
