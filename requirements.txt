@@ -1,5 +1,6 @@
 aiogram>=3.0.0
 yt-dlp>=2025.2.19
+curl-cffi
 fastapi
 uvicorn
 python-dotenv
