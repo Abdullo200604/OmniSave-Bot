@@ -63,7 +63,7 @@ async def extract_metadata(url: str):
     if "threads.com" in url:
         url = url.replace("threads.com", "threads.net")
     
-    # 1. Try FastSaver first with ORIGINAL URL (let it handle the share links)
+    # 1. Try FastSaver first with ORIGINAL URL
     print("Trying FastSaver API with original URL...", flush=True)
     fs_data = await get_fastsaver_info(original_url)
     if fs_data:
@@ -93,19 +93,80 @@ async def extract_metadata(url: str):
             "thumb": ra_data.get('thumbnail')
         }
 
-    # 3. If external APIs fail with share link, try resolving redirect for yt-dlp
-    if "facebook.com/share" in url:
-        print("Resolving Facebook share redirect for yt-dlp fallback...", flush=True)
-        url = await resolve_redirect(url)
-        print(f"Resolved URL for yt-dlp: {url}", flush=True)
+    # 3. If external APIs fail, try yt-dlp with cookies if available
+    if "facebook.com" in url or "instagram.com" in url:
+        if "facebook.com/share" in url:
+            print("Resolving Facebook share redirect for yt-dlp fallback...", flush=True)
+            url = await resolve_redirect(url)
+            print(f"Resolved URL for yt-dlp: {url}", flush=True)
 
-    # 4. Fallback to yt-dlp
     print("Trying yt-dlp fallback...", flush=True)
     user_agents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
     ]
     
+def get_cookie_opts():
+    cookie_opts = {}
+    if os.path.exists("cookies.txt"):
+        print("Using cookies.txt for yt-dlp", flush=True)
+        cookie_opts['cookiefile'] = 'cookies.txt'
+    elif os.getenv("USE_BROWSER_COOKIES") == "True":
+        print("Using browser cookies (edge) for yt-dlp", flush=True)
+        cookie_opts['cookiesfrombrowser'] = ('edge',)
+    return cookie_opts
+
+async def extract_metadata(url: str):
+    print(f"Extracting metadata for: {url}", flush=True)
+    original_url = url
+
+    # Normalize Threads.com to Threads.net
+    if "threads.com" in url:
+        url = url.replace("threads.com", "threads.net")
+    
+    # 1. Try FastSaver first with ORIGINAL URL
+    print("Trying FastSaver API with original URL...", flush=True)
+    fs_data = await get_fastsaver_info(original_url)
+    if fs_data:
+        print(f"FastSaver success (original URL): {fs_data.get('hosting')}", flush=True)
+        return {
+            "title": fs_data.get('caption') or "Video",
+            "artist": fs_data.get('hosting') or "FastSaver",
+            "track": fs_data.get('shortcode'),
+            "duration": None,
+            "url": original_url,
+            "download_url": fs_data.get('download_url'),
+            "thumb": fs_data.get('thumb')
+        }
+        
+    # 2. Try RapidAPI fallback with ORIGINAL URL
+    print("Trying RapidAPI with original URL...", flush=True)
+    ra_data = await get_rapidapi_info(original_url)
+    if ra_data and ra_data.get("url"):
+        print("RapidAPI success (original URL)", flush=True)
+        return {
+            "title": ra_data.get('title') or "Video",
+            "artist": "RapidAPI",
+            "track": None,
+            "duration": None,
+            "url": original_url,
+            "download_url": ra_data.get("url"),
+            "thumb": ra_data.get('thumbnail')
+        }
+
+    # 3. If external APIs fail, try yt-dlp with cookies if available
+    if "facebook.com" in url or "instagram.com" in url:
+        if "facebook.com/share" in url:
+            print("Resolving Facebook share redirect for yt-dlp fallback...", flush=True)
+            url = await resolve_redirect(url)
+            print(f"Resolved URL for yt-dlp: {url}", flush=True)
+
+    print("Trying yt-dlp fallback...", flush=True)
+    user_agents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    ]
+    
+    cookie_opts = get_cookie_opts()
+
     for ua in user_agents:
         ydl_opts = {
             'format': 'best',
@@ -115,6 +176,7 @@ async def extract_metadata(url: str):
             'referer': 'https://www.google.com/',
             'nocheckcertificate': True,
             'geo_bypass': True,
+            **cookie_opts
         }
         loop = asyncio.get_event_loop()
         try:
@@ -170,13 +232,12 @@ async def download_audio(url: str, output_path: str, direct_url: str = None):
                         content = await resp.read()
                         with open(output_path, 'wb') as f:
                             f.write(content)
-                        # We might need to convert it to mp3 if it's not already
-                        # But for now let's assume direct_url is usable or handled by handler
                         return output_path
         except Exception as e:
             print(f"Direct audio download error: {e}")
 
     # Fallback/Default yt-dlp download
+    cookie_opts = get_cookie_opts()
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': output_path,
@@ -187,6 +248,7 @@ async def download_audio(url: str, output_path: str, direct_url: str = None):
         'nocheckcertificate': True,
         'geo_bypass': True,
         'impersonate': 'chrome',
+        **cookie_opts,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -215,6 +277,7 @@ async def download_video(url: str, output_path: str, direct_url: str = None):
         except Exception as e:
             print(f"Direct video download error: {e}")
 
+    cookie_opts = get_cookie_opts()
     ydl_opts = {
         'format': 'best',
         'outtmpl': output_path,
@@ -225,6 +288,7 @@ async def download_video(url: str, output_path: str, direct_url: str = None):
         'nocheckcertificate': True,
         'geo_bypass': True,
         'impersonate': 'chrome',
+        **cookie_opts
     }
     loop = asyncio.get_event_loop()
     try:
