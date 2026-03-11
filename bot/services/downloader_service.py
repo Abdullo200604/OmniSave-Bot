@@ -39,13 +39,16 @@ async def get_rapidapi_info(url: str):
     return None
 
 async def extract_metadata(url: str):
+    print(f"Extracting metadata for: {url}")
     # Normalize Threads.com to Threads.net
     if "threads.com" in url:
         url = url.replace("threads.com", "threads.net")
     
     # 1. Try FastSaver first
+    print("Trying FastSaver API...")
     fs_data = await get_fastsaver_info(url)
     if fs_data:
+        print(f"FastSaver success: {fs_data.get('hosting')}")
         return {
             "title": fs_data.get('caption') or "Video",
             "artist": fs_data.get('hosting') or "FastSaver",
@@ -57,8 +60,10 @@ async def extract_metadata(url: str):
         }
         
     # 2. Try RapidAPI fallback
+    print("Trying RapidAPI...")
     ra_data = await get_rapidapi_info(url)
     if ra_data and ra_data.get("url"):
+        print("RapidAPI success")
         return {
             "title": ra_data.get('title') or "Video",
             "artist": "RapidAPI",
@@ -70,6 +75,7 @@ async def extract_metadata(url: str):
         }
         
     # 3. Fallback to yt-dlp
+    print("Trying yt-dlp fallback...")
     user_agents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
@@ -84,12 +90,13 @@ async def extract_metadata(url: str):
             'referer': 'https://www.google.com/',
             'nocheckcertificate': True,
             'geo_bypass': True,
-            'impersonate': 'chrome',
+            # 'impersonate': 'chrome', # Disabling for now due to dependency issues
         }
         loop = asyncio.get_event_loop()
         try:
             info = await loop.run_in_executor(None, lambda: extract_info(url, ydl_opts, download=False))
             if info:
+                print(f"yt-dlp success: {info.get('title')}")
                 return {
                     "title": info.get('title'),
                     "artist": info.get('artist') or info.get('uploader'),
@@ -100,6 +107,7 @@ async def extract_metadata(url: str):
         except Exception as e:
             print(f"yt-dlp attempt failure with UA {ua}: {e}")
             
+    print("All metadata extraction methods failed.")
     return None
 
 async def search_youtube(query: str, limit: int = 10):
