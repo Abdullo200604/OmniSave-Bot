@@ -24,6 +24,7 @@ async def extract_metadata(url: str):
             'geo_bypass': True,
             'ignoreerrors': False,
             'no_color': True,
+            'impersonate': 'chrome', # New yt-dlp feature to bypass TLS fingerprinting
         }
         loop = asyncio.get_event_loop()
         try:
@@ -81,6 +82,7 @@ async def download_audio(url: str, output_path: str):
         'referer': 'https://www.google.com/',
         'nocheckcertificate': True,
         'geo_bypass': True,
+        'impersonate': 'chrome',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -112,6 +114,7 @@ async def download_video(url: str, output_path: str):
         'referer': 'https://www.google.com/',
         'nocheckcertificate': True,
         'geo_bypass': True,
+        'impersonate': 'chrome',
     }
     loop = asyncio.get_event_loop()
     try:
