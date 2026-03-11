@@ -119,48 +119,22 @@ async def extract_metadata(url: str):
     print(f"Extracting metadata for: {url}", flush=True)
     original_url = url
 
+async def extract_metadata(url: str):
+    print(f"Extracting metadata for: {url}", flush=True)
+    original_url = url
+
     # Normalize Threads.com to Threads.net
     if "threads.com" in url:
         url = url.replace("threads.com", "threads.net")
     
-    # 1. Try FastSaver first with ORIGINAL URL
-    print("Trying FastSaver API with original URL...", flush=True)
-    fs_data = await get_fastsaver_info(original_url)
-    if fs_data:
-        print(f"FastSaver success (original URL): {fs_data.get('hosting')}", flush=True)
-        return {
-            "title": fs_data.get('caption') or "Video",
-            "artist": fs_data.get('hosting') or "FastSaver",
-            "track": fs_data.get('shortcode'),
-            "duration": None,
-            "url": original_url,
-            "download_url": fs_data.get('download_url'),
-            "thumb": fs_data.get('thumb')
-        }
-        
-    # 2. Try RapidAPI fallback with ORIGINAL URL
-    print("Trying RapidAPI with original URL...", flush=True)
-    ra_data = await get_rapidapi_info(original_url)
-    if ra_data and ra_data.get("url"):
-        print("RapidAPI success (original URL)", flush=True)
-        return {
-            "title": ra_data.get('title') or "Video",
-            "artist": "RapidAPI",
-            "track": None,
-            "duration": None,
-            "url": original_url,
-            "download_url": ra_data.get("url"),
-            "thumb": ra_data.get('thumbnail')
-        }
+    # 1. Try yt-dlp FIRST (as primary engine)
+    print("Trying yt-dlp (Primary)...", flush=True)
+    current_url = url
+    if "facebook.com/share" in url:
+        print("Resolving Facebook share redirect for yt-dlp...", flush=True)
+        current_url = await resolve_redirect(url)
+        print(f"Resolved URL for yt-dlp: {current_url}", flush=True)
 
-    # 3. If external APIs fail, try yt-dlp with cookies if available
-    if "facebook.com" in url or "instagram.com" in url:
-        if "facebook.com/share" in url:
-            print("Resolving Facebook share redirect for yt-dlp fallback...", flush=True)
-            url = await resolve_redirect(url)
-            print(f"Resolved URL for yt-dlp: {url}", flush=True)
-
-    print("Trying yt-dlp fallback...", flush=True)
     user_agents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     ]
@@ -180,7 +154,7 @@ async def extract_metadata(url: str):
         }
         loop = asyncio.get_event_loop()
         try:
-            info = await loop.run_in_executor(None, lambda: extract_info(url, ydl_opts, download=False))
+            info = await loop.run_in_executor(None, lambda: extract_info(current_url, ydl_opts, download=False))
             if info:
                 print(f"yt-dlp success: {info.get('title')}", flush=True)
                 return {
@@ -188,10 +162,40 @@ async def extract_metadata(url: str):
                     "artist": info.get('artist') or info.get('uploader'),
                     "track": info.get('track'),
                     "duration": info.get('duration'),
-                    "url": url
+                    "url": current_url
                 }
         except Exception as e:
             print(f"yt-dlp attempt failure with UA {ua}: {e}", flush=True)
+
+    # 2. Try FastSaver as fallback
+    print("Trying FastSaver API (Fallback)...", flush=True)
+    fs_data = await get_fastsaver_info(original_url)
+    if fs_data:
+        print(f"FastSaver success (fallback): {fs_data.get('hosting')}", flush=True)
+        return {
+            "title": fs_data.get('caption') or "Video",
+            "artist": fs_data.get('hosting') or "FastSaver",
+            "track": fs_data.get('shortcode'),
+            "duration": None,
+            "url": original_url,
+            "download_url": fs_data.get('download_url'),
+            "thumb": fs_data.get('thumb')
+        }
+        
+    # 3. Try RapidAPI as second fallback
+    print("Trying RapidAPI (Fallback)...", flush=True)
+    ra_data = await get_rapidapi_info(original_url)
+    if ra_data and ra_data.get("url"):
+        print("RapidAPI success (fallback)", flush=True)
+        return {
+            "title": ra_data.get('title') or "Video",
+            "artist": "RapidAPI",
+            "track": None,
+            "duration": None,
+            "url": original_url,
+            "download_url": ra_data.get("url"),
+            "thumb": ra_data.get('thumbnail')
+        }
             
     print("All metadata extraction methods failed.", flush=True)
     return None

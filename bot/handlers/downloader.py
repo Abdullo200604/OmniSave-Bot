@@ -32,7 +32,7 @@ async def handle_link(message: types.Message):
             )
             continue
 
-        status_msg = await message.answer(f"🔍 Havola tahlil qilinmoqda: {url}")
+        status_msg = await message.reply(f"🔍 Havola tahlil qilinmoqda: {url}")
         
         metadata = await extract_metadata(url)
         if not metadata:
@@ -43,11 +43,11 @@ async def handle_link(message: types.Message):
         final_url = metadata.get('url', url)
         chat_id = message.chat.id
         
-        # Note: In multi-link scenario, media_cache might get overwritten 
-        # but since we answer each one with buttons, we need a way to track which is which.
-        # For now, let's keep it simple or use a better key.
-        # Let's use a composite key for multi-link support or keep it as is if they answer one by one.
-        media_cache[chat_id] = {"url": final_url, "metadata": metadata}
+        media_cache[chat_id] = {
+            "url": final_url, 
+            "metadata": metadata,
+            "orig_message_id": message.message_id
+        }
         
         title = metadata.get('title') or "Video"
         artist = metadata.get('artist') or ""
@@ -58,7 +58,7 @@ async def handle_link(message: types.Message):
         builder.adjust(1)
         
         await status_msg.delete()
-        await message.answer(
+        await message.reply(
             f"✅ Ma'lumot topildi:\n\n"
             f"📝 **Nomi:** {title}\n"
             f"👤 **Muallif:** {artist}\n\n"

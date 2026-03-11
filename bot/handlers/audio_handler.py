@@ -17,6 +17,7 @@ async def handle_video_download(callback: types.CallbackQuery):
     
     data = media_cache[chat_id]
     direct_url = data['metadata'].get("download_url")
+    orig_msg_id = data.get("orig_message_id")
     await callback.message.edit_text("⏳ Video yuklanmoqda...")
     
     file_id = str(uuid.uuid4())
@@ -27,7 +28,8 @@ async def handle_video_download(callback: types.CallbackQuery):
         await callback.message.delete()
         await callback.message.answer_video(
             video=types.FSInputFile(path),
-            caption=f"✅ {data['metadata'].get('title', 'Video')}"
+            caption=f"✅ {data['metadata'].get('title', 'Video')}",
+            reply_to_message_id=orig_msg_id
         )
         os.remove(path)
     else:
@@ -42,6 +44,7 @@ async def handle_music_search(callback: types.CallbackQuery):
     
     data = media_cache[chat_id]
     metadata = data['metadata']
+    orig_msg_id = data.get("orig_message_id")
     
     query = metadata.get('title') or metadata.get('track') or "music"
     artist = metadata.get('artist') or ""
@@ -53,7 +56,7 @@ async def handle_music_search(callback: types.CallbackQuery):
         await callback.message.edit_text("❌ Hech qanday musiqa topilmadi.")
         return
     
-    search_cache[chat_id] = results
+    search_cache[chat_id] = {"results": results, "orig_message_id": orig_msg_id}
     
     text = f"🎵 **Musiqa:** {query}\n👤 **Artis:** {artist}\n\n**Mavjud versiyalar:**\n\n"
     builder = InlineKeyboardBuilder()
@@ -74,7 +77,10 @@ async def handle_selection(callback: types.CallbackQuery):
         await callback.answer("❌ Qidiruv natijalari eskirgan.")
         return
     
-    selection = search_cache[chat_id][idx]
+    cache_data = search_cache[chat_id]
+    selection = cache_data["results"][idx]
+    orig_msg_id = cache_data.get("orig_message_id")
+    
     await callback.message.edit_text(f"⏳ **{selection['title']}** yuklanmoqda...")
     
     file_id = str(uuid.uuid4())
@@ -84,16 +90,17 @@ async def handle_selection(callback: types.CallbackQuery):
     
     if actual_path and os.path.exists(actual_path):
         builder = InlineKeyboardBuilder()
-        builder.button(text="🐌 Slowed", callback_data=f"effect_slowed_{file_id}")
-        builder.button(text="🎧 8D Audio", callback_data=f"effect_8d_{file_id}")
-        builder.button(text="🔊 Bass Boost", callback_data=f"effect_bass_{file_id}")
+        builder.button(text="🐌 Slowed", callback_data=f"effect_slowed_{file_id}_{orig_msg_id if orig_msg_id else 0}")
+        builder.button(text="🎧 8D Audio", callback_data=f"effect_8d_{file_id}_{orig_msg_id if orig_msg_id else 0}")
+        builder.button(text="🔊 Bass Boost", callback_data=f"effect_bass_{file_id}_{orig_msg_id if orig_msg_id else 0}")
         builder.adjust(1)
         
         await callback.message.delete()
         await callback.message.answer_audio(
             audio=types.FSInputFile(actual_path),
             caption=f"✅ {selection['title']}\n\nEffektini tanlang:",
-            reply_markup=builder.as_markup()
+            reply_markup=builder.as_markup(),
+            reply_to_message_id=orig_msg_id
         )
         # Note: We keep the original file for processing
     else:
@@ -104,6 +111,8 @@ async def handle_effect(callback: types.CallbackQuery):
     parts = callback.data.split("_")
     effect = parts[1]
     file_id = parts[2]
+    orig_msg_id = int(parts[3]) if len(parts) > 3 else None
+    if orig_msg_id == 0: orig_msg_id = None
     
     input_path = f"downloads/{file_id}.mp3"
     output_path = f"downloads/{file_id}_{effect}.mp3"
@@ -125,7 +134,8 @@ async def handle_effect(callback: types.CallbackQuery):
     if success and os.path.exists(output_path):
         await callback.message.answer_audio(
             audio=types.FSInputFile(output_path),
-            caption=f"✨ {effect.capitalize()} versiyasi tayyor!"
+            caption=f"✨ {effect.capitalize()} versiyasi tayyor!",
+            reply_to_message_id=orig_msg_id
         )
         os.remove(output_path)
     else:
