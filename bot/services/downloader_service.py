@@ -63,141 +63,98 @@ async def extract_metadata(url: str):
     if "threads.com" in url:
         url = url.replace("threads.com", "threads.net")
     
-    # 1. Try FastSaver first with ORIGINAL URL
-    print("Trying FastSaver API with original URL...", flush=True)
-    fs_data = await get_fastsaver_info(original_url)
-    if fs_data:
-        print(f"FastSaver success (original URL): {fs_data.get('hosting')}", flush=True)
-        return {
-            "title": fs_data.get('caption') or "Video",
-            "artist": fs_data.get('hosting') or "FastSaver",
-            "track": fs_data.get('shortcode'),
-            "duration": None,
-            "url": original_url,
-            "download_url": fs_data.get('download_url'),
-            "thumb": fs_data.get('thumb')
-        }
-        
-    # 2. Try RapidAPI fallback with ORIGINAL URL
-    print("Trying RapidAPI with original URL...", flush=True)
-    ra_data = await get_rapidapi_info(original_url)
-    if ra_data and ra_data.get("url"):
-        print("RapidAPI success (original URL)", flush=True)
-        return {
-            "title": ra_data.get('title') or "Video",
-            "artist": "RapidAPI",
-            "track": None,
-            "duration": None,
-            "url": original_url,
-            "download_url": ra_data.get("url"),
-            "thumb": ra_data.get('thumbnail')
-        }
+    # helper for yt-dlp attempt
+    async def try_ytdlp(target_url):
+        print("Trying yt-dlp...", flush=True)
+        if "facebook.com/share" in target_url:
+            print("Resolving Facebook share redirect for yt-dlp...", flush=True)
+            target_url = await resolve_redirect(target_url)
+            print(f"Resolved URL for yt-dlp: {target_url}", flush=True)
 
-    # 3. If external APIs fail, try yt-dlp with cookies if available
-    if "facebook.com" in url or "instagram.com" in url:
-        if "facebook.com/share" in url:
-            print("Resolving Facebook share redirect for yt-dlp fallback...", flush=True)
-            url = await resolve_redirect(url)
-            print(f"Resolved URL for yt-dlp: {url}", flush=True)
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        ]
+        cookie_opts = get_cookie_opts()
+        for ua in user_agents:
+            ydl_opts = {
+                'format': 'best',
+                'quiet': True,
+                'no_warnings': True,
+                'user_agent': ua,
+                'referer': 'https://www.google.com/',
+                'nocheckcertificate': True,
+                'geo_bypass': True,
+                **cookie_opts
+            }
+            loop = asyncio.get_event_loop()
+            try:
+                info = await loop.run_in_executor(None, lambda: extract_info(target_url, ydl_opts, download=False))
+                if info:
+                    print(f"yt-dlp success: {info.get('title')}", flush=True)
+                    return {
+                        "title": info.get('title'),
+                        "artist": info.get('artist') or info.get('uploader'),
+                        "track": info.get('track'),
+                        "duration": info.get('duration'),
+                        "url": target_url
+                    }
+            except Exception as e:
+                print(f"yt-dlp attempt failure with UA {ua}: {e}", flush=True)
+        return None
 
-    print("Trying yt-dlp fallback...", flush=True)
-    user_agents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    ]
+    is_fb_insta = "facebook.com" in url or "instagram.com" in url
+    has_cookies = os.path.exists("cookies.txt")
     
-def get_cookie_opts():
-    cookie_opts = {}
-    if os.path.exists("cookies.txt"):
-        print("Using cookies.txt for yt-dlp", flush=True)
-        cookie_opts['cookiefile'] = 'cookies.txt'
-    elif os.getenv("USE_BROWSER_COOKIES") == "True":
-        print("Using browser cookies (edge) for yt-dlp", flush=True)
-        cookie_opts['cookiesfrombrowser'] = ('edge',)
-    return cookie_opts
+    # If FB/Insta and NO cookies, APIs are mandatory
+    if is_fb_insta and not has_cookies:
+        print("FB/Insta and no cookies.txt detecting. Using APIs as primary.", flush=True)
+        fs_data = await get_fastsaver_info(original_url)
+        if fs_data:
+            return {
+                "title": fs_data.get('caption') or "Video",
+                "artist": fs_data.get('hosting') or "FastSaver",
+                "track": fs_data.get('shortcode'),
+                "url": original_url,
+                "download_url": fs_data.get('download_url'),
+                "thumb": fs_data.get('thumb')
+            }
+        # fallback to RapidAPI
+        ra_data = await get_rapidapi_info(original_url)
+        if ra_data and ra_data.get("url"):
+            return {
+                "title": ra_data.get('title') or "Video",
+                "artist": "RapidAPI",
+                "url": original_url,
+                "download_url": ra_data.get("url"),
+                "thumb": ra_data.get('thumbnail')
+            }
 
-async def extract_metadata(url: str):
-    print(f"Extracting metadata for: {url}", flush=True)
-    original_url = url
+    # Otherwise (or if APIs failed), try yt-dlp
+    res = await try_ytdlp(url)
+    if res: return res
 
-async def extract_metadata(url: str):
-    print(f"Extracting metadata for: {url}", flush=True)
-    original_url = url
+    # If yt-dlp failed and we haven't tried APIs yet (non FB/Insta case)
+    if not (is_fb_insta and not has_cookies):
+        fs_data = await get_fastsaver_info(original_url)
+        if fs_data:
+            return {
+                "title": fs_data.get('caption') or "Video",
+                "artist": fs_data.get('hosting') or "FastSaver",
+                "track": fs_data.get('shortcode'),
+                "url": original_url,
+                "download_url": fs_data.get('download_url'),
+                "thumb": fs_data.get('thumb')
+            }
+        ra_data = await get_rapidapi_info(original_url)
+        if ra_data and ra_data.get("url"):
+            return {
+                "title": ra_data.get('title') or "Video",
+                "artist": "RapidAPI",
+                "url": original_url,
+                "download_url": ra_data.get("url"),
+                "thumb": ra_data.get('thumbnail')
+            }
 
-    # Normalize Threads.com to Threads.net
-    if "threads.com" in url:
-        url = url.replace("threads.com", "threads.net")
-    
-    # 1. Try yt-dlp FIRST (as primary engine)
-    print("Trying yt-dlp (Primary)...", flush=True)
-    current_url = url
-    if "facebook.com/share" in url:
-        print("Resolving Facebook share redirect for yt-dlp...", flush=True)
-        current_url = await resolve_redirect(url)
-        print(f"Resolved URL for yt-dlp: {current_url}", flush=True)
-
-    user_agents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    ]
-    
-    cookie_opts = get_cookie_opts()
-
-    for ua in user_agents:
-        ydl_opts = {
-            'format': 'best',
-            'quiet': True,
-            'no_warnings': True,
-            'user_agent': ua,
-            'referer': 'https://www.google.com/',
-            'nocheckcertificate': True,
-            'geo_bypass': True,
-            **cookie_opts
-        }
-        loop = asyncio.get_event_loop()
-        try:
-            info = await loop.run_in_executor(None, lambda: extract_info(current_url, ydl_opts, download=False))
-            if info:
-                print(f"yt-dlp success: {info.get('title')}", flush=True)
-                return {
-                    "title": info.get('title'),
-                    "artist": info.get('artist') or info.get('uploader'),
-                    "track": info.get('track'),
-                    "duration": info.get('duration'),
-                    "url": current_url
-                }
-        except Exception as e:
-            print(f"yt-dlp attempt failure with UA {ua}: {e}", flush=True)
-
-    # 2. Try FastSaver as fallback
-    print("Trying FastSaver API (Fallback)...", flush=True)
-    fs_data = await get_fastsaver_info(original_url)
-    if fs_data:
-        print(f"FastSaver success (fallback): {fs_data.get('hosting')}", flush=True)
-        return {
-            "title": fs_data.get('caption') or "Video",
-            "artist": fs_data.get('hosting') or "FastSaver",
-            "track": fs_data.get('shortcode'),
-            "duration": None,
-            "url": original_url,
-            "download_url": fs_data.get('download_url'),
-            "thumb": fs_data.get('thumb')
-        }
-        
-    # 3. Try RapidAPI as second fallback
-    print("Trying RapidAPI (Fallback)...", flush=True)
-    ra_data = await get_rapidapi_info(original_url)
-    if ra_data and ra_data.get("url"):
-        print("RapidAPI success (fallback)", flush=True)
-        return {
-            "title": ra_data.get('title') or "Video",
-            "artist": "RapidAPI",
-            "track": None,
-            "duration": None,
-            "url": original_url,
-            "download_url": ra_data.get("url"),
-            "thumb": ra_data.get('thumbnail')
-        }
-            
-    print("All metadata extraction methods failed.", flush=True)
     return None
 
 async def search_youtube(query: str, limit: int = 10):
