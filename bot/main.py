@@ -2,7 +2,7 @@ import asyncio
 import uvicorn
 from aiogram import Bot, Dispatcher
 from bot.config import BOT_TOKEN, PORT
-from bot.handlers import start, downloader, audio_handler, voice_handler
+from bot.handlers import start, downloader, audio_handler
 from web.server import app as web_app
 import threading
 
@@ -11,7 +11,6 @@ async def run_bot():
     dp = Dispatcher()
     
     dp.include_router(start.router)
-    dp.include_router(voice_handler.router)
     dp.include_router(downloader.router)
     dp.include_router(audio_handler.router)
     
